@@ -314,7 +314,7 @@ function draw(){
 
     // Check for collisions with walls or self
     if(snakeX<0 || snakeX>=gridSize*box || snakeY<0 || snakeY>=gridSize*box || collision(newHead, snake)){
-        clearInterval(game);
+        clearInterval(gameInterval);
         overlayText.textContent = "You Died!";
         overlay.style.display = "flex";
         return;
@@ -328,7 +328,7 @@ function draw(){
 
     // Win condition
     if(snake.length >= gridSize*gridSize){
-        clearInterval(game);
+        clearInterval(gameInterval);
         overlayText.textContent = "You Won!";
         overlay.style.display = "flex";
         return;

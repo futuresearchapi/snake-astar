@@ -1,5 +1,4 @@
-
-M<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -223,14 +222,15 @@ function getAIMove(){
         // Simulate move
         let simSnake = snake.map(seg=>({...seg}));
         let tempHead = {...simSnake[0]};
-        path.forEach(move=>{
+        // Apply the path moves
+        for(let move of path){
             if(move==="UP") tempHead.y-=box;
             if(move==="DOWN") tempHead.y+=box;
             if(move==="LEFT") tempHead.x-=box;
             if(move==="RIGHT") tempHead.x+=box;
             simSnake.unshift({...tempHead});
             simSnake.pop();
-        });
+        }
 
         // Check open space after reaching apple
         let freeSpace = floodFill(tempHead.x, tempHead.y, simSnake);
@@ -285,7 +285,11 @@ function draw(){
     });
 
     // Use AI move if enabled
-    if(useAI.checked) d = getAIMove();
+    if(useAI.checked){
+        const aiMove = getAIMove();
+        console.log("AI move:", aiMove);
+        d = aiMove;
+    }
 
     // Calculate new head position
     let snakeX = snake[0].x;

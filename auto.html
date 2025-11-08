@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+
+M<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -10,7 +11,7 @@
     label, button, input { margin:10px; font-size:1.2em;}
     button { padding:8px 16px; cursor:pointer; background:#00f; color:#fff; border:none; border-radius:5px;}
     button:hover { background:#0055ff;}
-    input { width:60px; }
+    input[type=number] { width:60px; }
     #overlay {
         position:absolute; top:0; left:0; width:100%; height:100%;
         background:rgba(0,0,0,0.8); color:white; font-size:48px;
@@ -26,6 +27,8 @@
 <br>
 <label>Map Size: <input type="number" id="mapSizeInput" value="15" min="5" max="50"></label>
 <label>Apples: <input type="number" id="appleCountInput" value="5" min="1" max="20"></label>
+<br>
+<label>Speed: <input type="range" id="speedSlider" min="50" max="300" value="120"> <span id="speedValue">120</span> ms</label>
 <canvas id="snake" width="480" height="480"></canvas>
 <h1>Score: <span id="score">0</span></h1>
 <button id="playAgain">Play Again</button>
@@ -41,20 +44,23 @@ const ctx = cvs.getContext("2d");
 let box = 32;
 let gridSize = parseInt(document.getElementById("mapSizeInput").value);
 let appleCount = parseInt(document.getElementById("appleCountInput").value);
+let speed = parseInt(document.getElementById("speedSlider").value);
+let gameInterval;
 
 let snake, foods, score, d, game;
 let useAI = document.getElementById("useAI");
 let showPath = document.getElementById("showPath");
-
-let dead = new Audio("/sound/gameover.mp3");
-let eat = new Audio("/sound/eated.mp3");
 let overlay = document.getElementById("overlay");
 let overlayText = document.getElementById("overlayText");
+const speedSlider = document.getElementById("speedSlider");
+const speedValue = document.getElementById("speedValue");
 
-// ---------------- Initialize Game ----------------
+// Initialize game
 function initGame() {
     gridSize = parseInt(document.getElementById("mapSizeInput").value);
     appleCount = parseInt(document.getElementById("appleCountInput").value);
+    speed = parseInt(document.getElementById("speedSlider").value);
+    speedValue.textContent = speed;
     cvs.width = cvs.height = gridSize * box;
 
     snake = [{x: Math.floor(gridSize/2)*box, y: Math.floor(gridSize/2)*box}];
@@ -66,11 +72,19 @@ function initGame() {
 
     overlay.style.display = "none";
 
-    if(game) clearInterval(game);
-    game = setInterval(draw, 120);
+    if(gameInterval) clearInterval(gameInterval);
+    gameInterval = setInterval(draw, speed);
 }
 
-// ---------------- Spawn Food ----------------
+// Update speed on slider change
+speedSlider.addEventListener("input", () => {
+    speed = parseInt(speedSlider.value);
+    speedValue.textContent = speed;
+    clearInterval(gameInterval);
+    gameInterval = setInterval(draw, speed);
+});
+
+// Spawn food
 function spawnFood() {
     let f;
     do {
@@ -79,19 +93,18 @@ function spawnFood() {
     return f;
 }
 
-// ---------------- Collision ----------------
+// Collision detection
 function collision(head, array){
     return array.some(seg => seg.x===head.x && seg.y===head.y);
 }
 
-// ---------------- Heuristic for A* ----------------
+// Heuristic function for A*
 function heuristic(a, b) {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 
-// ---------------- Hybrid Pathfinding (A* + BFS) ----------------
+// Hybrid pathfinding (A* + BFS fallback)
 function hybridPath(start, target, snakeBody) {
-    // A* implementation
     const directions = [
         {name:"UP", dx:0, dy:-1},
         {name:"DOWN", dx:0, dy:1},
@@ -99,7 +112,6 @@ function hybridPath(start, target, snakeBody) {
         {name:"RIGHT", dx:1, dy:0}
     ];
 
-    // Priority queue for A*
     let openSet = [];
     let cameFrom = {};
     let gScore = {};
@@ -114,12 +126,10 @@ function hybridPath(start, target, snakeBody) {
     const snakeSet = new Set(snakeBody.map(seg => key(seg)));
 
     while (openSet.length > 0) {
-        // get node with lowest f
         openSet.sort((a, b) => a.f - b.f);
         const current = openSet.shift().pos;
 
         if (current.x === target.x && current.y === target.y) {
-            // reconstruct path
             let path = [];
             let c = key(current);
             while(c !== key(start)){
@@ -141,21 +151,21 @@ function hybridPath(start, target, snakeBody) {
             let neighborX = current.x + dir.dx*box;
             let neighborY = current.y + dir.dy*box;
             if(neighborX<0 || neighborX>=gridSize*box || neighborY<0 || neighborY>=gridSize*box) continue;
-            // ignore if it's snake body except current position
             if(snakeSet.has(neighborX+","+neighborY) && !(neighborX===target.x && neighborY===target.y)) continue;
             let tentative_gScore = gScore[key(current)] + 1;
-            if(tentative_gScore < (gScore[key({x: neighborX, y: neighborY})]] || Infinity)){
-                cameFrom[key({x: neighborX, y: neighborY})]] = {x: current.x, y: current.y};
-                gScore[key({x: neighborX, y: neighborY})]] = tentative_gScore;
-                fScore[key({x: neighborX, y: neighborY})]] = tentative_gScore + heuristic({x: neighborX, y: neighborY}, target);
-                if(!openSet.some(n => key(n.pos)===key({x: neighborX, y: neighborY}))){
-                    openSet.push({pos: {x: neighborX, y: neighborY}, f: fScore[key({x: neighborX, y: neighborY})]]});
+            let neighborKey = key({x: neighborX, y: neighborY});
+            if(tentative_gScore < (gScore[neighborKey] || Infinity)){
+                cameFrom[neighborKey] = {x: current.x, y: current.y};
+                gScore[neighborKey] = tentative_gScore;
+                fScore[neighborKey] = tentative_gScore + heuristic({x: neighborX, y: neighborY}, target);
+                if(!openSet.some(n => key(n.pos)===neighborKey)){
+                    openSet.push({pos: {x: neighborX, y: neighborY}, f: fScore[neighborKey]});
                 }
             }
         }
     }
 
-    // BFS fallback if A* fails
+    // BFS fallback
     const queue = [{x:start.x, y:start.y, path:[]}];
     const visited = new Set();
     visited.add(key(start));
@@ -177,7 +187,7 @@ function hybridPath(start, target, snakeBody) {
     return [];
 }
 
-// ---------------- Flood Fill ----------------
+// Flood fill for open space
 function floodFill(x, y, snakeBody){
     let visited = {};
     let queue = [{x,y}];
@@ -198,7 +208,7 @@ function floodFill(x, y, snakeBody){
     return count;
 }
 
-// ---------------- Determine AI Move ----------------
+// Determine AI move
 function getAIMove(){
     if(!useAI.checked) return d;
 
@@ -210,7 +220,7 @@ function getAIMove(){
         const path = hybridPath(snake[0], f, snake);
         if(path.length===0) continue;
 
-        // Simulate moving along path and then follow tail loop if necessary
+        // Simulate move
         let simSnake = snake.map(seg=>({...seg}));
         let tempHead = {...simSnake[0]};
         path.forEach(move=>{
@@ -222,7 +232,7 @@ function getAIMove(){
             simSnake.pop();
         });
 
-        // After reaching apple, simulate free space if following tail loop
+        // Check open space after reaching apple
         let freeSpace = floodFill(tempHead.x, tempHead.y, simSnake);
         if(freeSpace > bestScore){
             bestScore = freeSpace;
@@ -231,7 +241,7 @@ function getAIMove(){
         }
     }
 
-    if(showPath.checked){
+    if(showPath.checked && bestPath.length>0){
         ctx.fillStyle="rgba(0,200,255,0.5)";
         let pos = {...snake[0]};
         bestPath.forEach(move=>{
@@ -246,20 +256,21 @@ function getAIMove(){
     return bestPath[0] || d;
 }
 
-// ---------------- Manual control ----------------
+// Manual control
 document.addEventListener("keydown", function(event){
-    if(useAI.checked) return; // ignore manual input when AI is on
+    if(useAI.checked) return;
     if(event.key === "ArrowUp" && d !== "DOWN") d = "UP";
     if(event.key === "ArrowDown" && d !== "UP") d = "DOWN";
     if(event.key === "ArrowLeft" && d !== "RIGHT") d = "LEFT";
     if(event.key === "ArrowRight" && d !== "LEFT") d = "RIGHT";
 });
 
-// ---------------- Draw ----------------
+// Draw function
 function draw(){
     ctx.fillStyle="#111";
     ctx.fillRect(0,0,cvs.width,cvs.height);
 
+    // Draw snake
     snake.forEach((seg,i)=>{
         ctx.fillStyle = i===0 ? "blue" : "lightblue";
         ctx.fillRect(seg.x,seg.y,box,box);
@@ -267,10 +278,16 @@ function draw(){
         ctx.strokeRect(seg.x,seg.y,box,box);
     });
 
-    foods.forEach(f=>{ ctx.fillStyle="red"; ctx.fillRect(f.x,f.y,box,box); });
+    // Draw food
+    foods.forEach(f => {
+        ctx.fillStyle="red"; 
+        ctx.fillRect(f.x,f.y,box,box);
+    });
 
+    // Use AI move if enabled
     if(useAI.checked) d = getAIMove();
 
+    // Calculate new head position
     let snakeX = snake[0].x;
     let snakeY = snake[0].y;
     if(d==="UP") snakeY-=box;
@@ -280,29 +297,32 @@ function draw(){
 
     let newHead = {x:snakeX, y:snakeY};
 
-    // Eat food
+    // Check for collisions with food
     for(let i=0;i<foods.length;i++){
         if(newHead.x===foods[i].x && newHead.y===foods[i].y){
             score++;
-            eat.play();
+            // Play eat sound if you add it
+            // eat.play();
             foods[i] = spawnFood();
             snake.push({...snake[snake.length-1]}); // grow
         }
     }
 
+    // Check for collisions with walls or self
     if(snakeX<0 || snakeX>=gridSize*box || snakeY<0 || snakeY>=gridSize*box || collision(newHead, snake)){
         clearInterval(game);
-        dead.play();
         overlayText.textContent = "You Died!";
         overlay.style.display = "flex";
         return;
     }
 
+    // Add new head
     snake.unshift(newHead);
+    // Remove tail unless grown
     snake.pop();
     document.getElementById("score").textContent = score;
 
-    // Win condition: snake fills grid (all space occupied)
+    // Win condition
     if(snake.length >= gridSize*gridSize){
         clearInterval(game);
         overlayText.textContent = "You Won!";
@@ -311,10 +331,10 @@ function draw(){
     }
 }
 
-// ---------------- Play Again ----------------
+// Play again button
 document.getElementById("playAgain").addEventListener("click", initGame);
 
-// ---------------- Start Game ----------------
+// Start game
 initGame();
 </script>
 </body>

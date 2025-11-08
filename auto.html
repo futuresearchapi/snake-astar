@@ -1,51 +1,165 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
-
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Snake ASTAR Auto</title>
-</head>
+<meta charset="UTF-8" />
+<title>Blue Snake AI - Max Length AI</title>
 <style>
-  body {
-    text-align: center;
-    font-family: calibri;
-  }
+body {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  background:#222; /* placeholder background */
+}
+canvas {
+  border:1px solid #000;
+}
 </style>
+</head>
 <body>
-  <h2>arsan.dev Snake AI with A* Algorithm</h2>
-  <canvas></canvas>
-  <h1>Score: <span id="score">0</span> | Time: <span id="time">0</span>s</h1>
-  <p><b>Mode: <font color="red">Automatic (BOT)</font></b></p>
-  <button type="button" onclick="location.reload()">Refresh</button>
-  <button type="button" id="play">Play</button>
-  <button type="button" id="pause" hidden>Pause</button>
-  <script src="snake.js" charset="utf-8"></script>
-  <script type="text/javascript">
-    var snake = new Game({
-      size: 400,
-      blockSize: 15,
-      fps: 25,
-      utils: {
-        showGrid: true,
-        distance: true,
-        distanceCount: true,
-        distancePerpendicular: true
-      },
-      aStar: true
-    });
-    var playBtn = document.querySelector("#play");
-    var pauseBtn = document.querySelector("#pause");
-    playBtn.addEventListener("click", function(){
-      this.hidden = true;
-      pauseBtn.hidden = false;
-      snake.play();
-    });
-    pauseBtn.addEventListener("click", function(){
-      this.hidden = true;
-      playBtn.hidden = false;
-      snake.pause();
-    });
-  </script>
-</body>
+<canvas id="gameCanvas" width="400" height="400"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
+const gridSize = 20;
+const rows = canvas.height / gridSize;
+const cols = canvas.width / gridSize;
+
+let snake = [{x: Math.floor(cols/2), y: Math.floor(rows/2)}];
+let direction = {x: 0, y: 0};
+let food = {x: 0, y: 0};
+let gameInterval;
+let path = [];
+let gameOver = false;
+
+function spawnFood() {
+  food.x = Math.floor(Math.random() * cols);
+  food.y = Math.floor(Math.random() * rows);
+  // Make sure food not on snake
+  for (const s of snake) {
+    if (s.x===food.x && s.y===food.y) {
+      spawnFood();
+      return;
+    }
+  }
+}
+
+function reset() {
+  snake = [{x: Math.floor(cols/2), y: Math.floor(rows/2)}];
+  direction = {x: 0, y: 0};
+  spawnFood();
+  gameOver = false;
+  clearInterval(gameInterval);
+  gameInterval = setInterval(update, 100);
+}
+
+function draw() {
+  ctx.fillStyle = '#222';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.fillStyle = 'green';
+  for (const s of snake) {
+    ctx.fillRect(s.x*gridSize, s.y*gridSize, gridSize, gridSize);
+  }
+  
+  ctx.fillStyle = 'red';
+  ctx.fillRect(food.x*gridSize, food.y*gridSize, gridSize, gridSize);
+}
+
+// Heuristic for A* like search
+function heuristic(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+// Simple hybrid pathfinding
+function findPath(start, goal, grid) {
+  const visited = new Set();
+  const queue = [];
+  // For A*, we need a priority queue, but we can simulate with sorting
+  queue.push({node: start, cost: 0, path: [start], priority: heuristic(start, goal)});
+  while (queue.length > 0) {
+    // sort by priority (cost + heuristic)
+    queue.sort((a, b) => (a.cost + heuristic(a.node, goal)) - (b.cost + heuristic(b.node, goal)));
+    const current = queue.shift();
+    const {node, path, cost} = current;
+    if (node.x === goal.x && node.y === goal.y) {
+      return path;
+    }
+    for (const dir of [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]) {
+      const neighbor = {x: node.x + dir.x, y: node.y + dir.y};
+      if (neighbor.x <0 || neighbor.x>=cols || neighbor.y<0 || neighbor.y>=rows) continue;
+      // Avoid walls (out of bounds) and snake body
+      if (grid.some(s => s.x===neighbor.x && s.y===neighbor.y) && !(neighbor.x===goal.x && neighbor.y===goal.y)) continue;
+      const key = neighbor.x + ',' + neighbor.y;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      queue.push({node: neighbor, cost: cost+1, path: [...path, neighbor], priority: cost+1 + heuristic(neighbor, goal)});
+    }
+  }
+  return []; // no path
+}
+
+function getNextMove() {
+  // Generate grid skeleton
+  const grid = [...snake];
+  const path = findPath(snake[0], food, grid);
+  if (path.length > 1) {
+    // Next step in path
+    const next = path[1];
+    const dx = next.x - snake[0].x;
+    const dy = next.y - snake[0].y;
+    return {x: dx, y: dy};
+  } else {
+    // fallback to BFS or default
+    return {x: 0, y: 0};
+  }
+}
+
+function update() {
+  if (gameOver) return;
+  if (snake.length && (direction.x === 0 && direction.y === 0)) {
+    // initialize direction
+    direction = getNextMove();
+  }
+  // Recalculate path and direction
+  const moveDir = getNextMove();
+  direction = moveDir;
+
+  const newHead = {
+    x: snake[0].x + direction.x,
+    y: snake[0].y + direction.y
+  };
+
+  // Check collisions
+  if (
+    newHead.x<0 || newHead.x>=cols ||
+    newHead.y<0 || newHead.y>=rows ||
+    snake.some(s => s.x===newHead.x && s.y===newHead.y)
+  ) {
+    clearInterval(gameInterval);
+    alert('Game Over!');
+    gameOver = true;
+    return;
+  }
+
+  snake.unshift(newHead);
+  if (newHead.x===food.x && newHead.y===food.y) {
+    spawnFood();
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key==='ArrowUp') {direction = {x:0,y:-1};}
+  if (e.key==='ArrowDown') {direction = {x:0,y:1};}
+  if (e.key==='ArrowLeft') {direction = {x:-1,y:0};}
+  if (e.key==='ArrowRight') {direction = {x:1,y:0};}
+});
+
+// Start game
+reset();
+</script>
+</body>
 </html>
